@@ -4,6 +4,7 @@
 #include "GameFramework/GameModeBase.h"
 #include "PongBall.h"
 #include "PongGameState.h"
+
 #include "PongGameModeBase.generated.h"
 
 UCLASS()
@@ -46,6 +47,9 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Rules")
     int WinningScore;
 
+    UPROPERTY(EditAnywhere, Category = "Rules")
+    int MaxBouncePrediction = 5;
+
     UPROPERTY(EditAnywhere, Category = "CurrentGame")
     FVector BallLocation = FVector(0, 0, 10);
 
@@ -63,5 +67,6 @@ private:
     bool HasPlayerWon(int player);
     void ResetPredictedExitPoint();
     void UpdatePlayerScore(int scoringPlayer);
-
+    FCollisionQueryParams GetCollisionParams();
+    FVector PredictBallExitPoint();
 };

@@ -7,6 +7,7 @@
 #include "AIPaddle.h"
 #include "PlayerPaddle.h"
 #include "PongPlayerController.h"
+#include "Kismet/GameplayStatics.h"
 #include "PongBall.h"
 
 void APongGameModeBase::BeginPlay()
@@ -36,7 +37,7 @@ void APongGameModeBase::StartGame()
 
 void APongGameModeBase::ResetBall() {
     BallMesh->SetWorldLocation(FVector(0, 0, 10));
-    BallMesh->SetPhysicsLinearVelocity(FVector(0,0,0));
+    BallMesh->SetPhysicsLinearVelocity(FVector::ZeroVector);
 }
 
 
@@ -65,7 +66,7 @@ void APongGameModeBase::ResetPredictedExitPoint()
         return;
     }
 
-    PongGameState->PredictedExitPoint = FVector(0, 0, 0);
+    PongGameState->PredictedExitPoint = FVector::ZeroVector;
 }
 
 void APongGameModeBase::UpdatePlayerScore(int scoringPlayer)
@@ -108,79 +109,67 @@ void APongGameModeBase::LaunchBall(int scoringPlayer)
     BallMesh->SetPhysicsLinearVelocity(InitialDirection * InitialSpeed);
 }
 
+FCollisionQueryParams APongGameModeBase::GetCollisionParams() {
+    FCollisionQueryParams CollisionParams;
+    CollisionParams.AddIgnoredActor(GameBall); // Ignore the ball itself during the sweep
+
+    // Find all actors of class APaddle
+    TArray<AActor*> FoundActors;
+    UGameplayStatics::GetAllActorsOfClass(GetWorld(), APaddle::StaticClass(), FoundActors);
+
+    // Add them to the ignore list
+    for (AActor* Actor : FoundActors)
+    {
+        CollisionParams.AddIgnoredActor(Actor);
+    }
+    return CollisionParams;
+  
+}
+
+FVector APongGameModeBase::PredictBallExitPoint()
+{
+    FVector Start = GameBall->GetActorLocation();
+    FVector ForwardVector = GameBall->GetVelocity().GetSafeNormal();
+    FVector End = ((ForwardVector * 2000.f) + Start); // adjust the distance as per your game
+    FHitResult HitResult;
+    FCollisionQueryParams CollisionParams = GetCollisionParams();
+
+    int bounceCount = 0;
+    while (bounceCount < MaxBouncePrediction)  // Loop until a goal box is hit or we reach MaxBouncePrediction times
+    {
+        End = ((ForwardVector * 2000.f) + Start);  // Set the end point of the trace line
+        bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, CollisionParams);
+
+        if (bHit)
+        {
+            DrawDebugLine(GetWorld(), Start, HitResult.Location, FColor::Green, false, 1, 0, 5);
+
+            // Check if a goal box is hit
+            if (HitResult.GetActor()->ActorHasTag("GoalBox"))
+            {
+                return HitResult.Location;
+            }
+            else  // Otherwise, we hit a wall, so let's prepare for the next iteration
+            {
+                ForwardVector = ForwardVector - 2 * (ForwardVector | HitResult.Normal) * HitResult.Normal;
+                Start = HitResult.Location + ForwardVector * 10.0f;
+            }
+        }
+        else
+        {
+            // Nothing was hit, return zero vector
+            return FVector::ZeroVector;
+        }
+        bounceCount++;
+    }
+    return FVector::ZeroVector;
+}
+
+
 void APongGameModeBase::OnPaddleHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit) {
     if (!OtherActor->IsA(APaddle::StaticClass()))
     {
         return;
     }
-    FVector currentPos = GameBall->GetActorLocation();
-    FVector currentVelocity = GameBall->GetVelocity();
-    FVector futurePos;
-    float minX = -150.0f;
-    float maxX = 150.0f;
-    float maxY = 240.0f;
-    float minY = -240.0f;
-
-    PredictedExitPoint = FVector(0,0,0);
-    FString ExitWall;
-
-    int maxBounces = 4;
-    int currentBounce = 0;
-    bool isExit = false;
-    while (currentBounce < maxBounces) {
-
-        // Time to reach each wall
-        float timeToReachMinX = (minX - currentPos.X) / currentVelocity.X;
-        float timeToReachMaxX = (maxX - currentPos.X) / currentVelocity.X;
-        float timeToReachMinY = (minY - currentPos.Y) / currentVelocity.Y;
-        float timeToReachMaxY = (maxY - currentPos.Y) / currentVelocity.Y;
-
-        // Initialize the minimum time to a high value
-        float minTime = FLT_MAX;
-        // Check each wall and see which one is hit first
-        if (currentVelocity.X < 0 && timeToReachMinX > 0 && timeToReachMinX < minTime) {
-            minTime = timeToReachMinX;
-        }
-        if (currentVelocity.X > 0 && timeToReachMaxX > 0 && timeToReachMaxX < minTime) {
-            minTime = timeToReachMaxX;
-        }
-        if (currentVelocity.Y < 0 && timeToReachMinY > 0 && timeToReachMinY < minTime) {
-            minTime = timeToReachMinY;
-            isExit = true;
-        }
-        if (currentVelocity.Y > 0 && timeToReachMaxY > 0 && timeToReachMaxY < minTime) {
-            minTime = timeToReachMaxY;
-            isExit = true;
-        }
-
-        // Predict future position based on the time to hit the wall
-        futurePos = currentPos + currentVelocity * minTime;
-
-        //Draw debug line from current position to future position
-        DrawDebugLine(
-            GetWorld(),
-            currentPos,
-            futurePos,
-            FColor::Green,
-            false,
-            1,
-            0,
-            5
-        );
-
-        if (isExit) {
-            PredictedExitPoint = futurePos;
-
-            if (PongGameState)
-            {
-                PongGameState->PredictedExitPoint = futurePos;
-            }
-            break;
-        }
-
-        currentPos = futurePos;
-        currentVelocity.X = -currentVelocity.X;
-        currentBounce++;
-    }
+    PredictedExitPoint = PredictBallExitPoint();
 }
-
