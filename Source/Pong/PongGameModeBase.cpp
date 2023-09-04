@@ -156,17 +156,17 @@ void APongGameModeBase::OnPaddleHit(UPrimitiveComponent* HitComponent, AActor* O
         // Predict future position based on the time to hit the wall
         futurePos = currentPos + currentVelocity * minTime;
 
-        // Draw debug line from current position to future position
-        //DrawDebugLine(
-        //    GetWorld(),
-        //    currentPos,
-        //    futurePos,
-        //    FColor::Green,
-        //    false,
-        //    1,
-        //    0,
-        //    5
-        //);
+        //Draw debug line from current position to future position
+        DrawDebugLine(
+            GetWorld(),
+            currentPos,
+            futurePos,
+            FColor::Green,
+            false,
+            1,
+            0,
+            5
+        );
 
         if (isExit) {
             PredictedExitPoint = futurePos;
