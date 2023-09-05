@@ -19,10 +19,6 @@ public:
     UFUNCTION()
     void OnPaddleHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
 
-    // Blueprint Callable Functions
-    UFUNCTION(BlueprintCallable, Category = "Gameplay")
-    void StartGame();
-
     UFUNCTION(BlueprintCallable, Category = "Gameplay")
     void LaunchBall(int scoringPlayer);
 
@@ -65,8 +61,6 @@ private:
     // Helper Functions
     void ResetBall();
     bool HasPlayerWon(int player);
-    void ResetPredictedExitPoint();
-    void UpdatePlayerScore(int scoringPlayer);
     FCollisionQueryParams GetCollisionParams();
-    FVector PredictBallExitPoint();
+    void PredictBallPath();
 };

@@ -19,4 +19,13 @@ public:
 
     UPROPERTY(BlueprintReadOnly, Category = "Pong")
     int Player2Score = 0;
+
+
+
+    void IncrementPlayerScore(int player);
+
+    void ResetPlayerScores();
+
+    void ResetPredictedExitPoint();
+
 };

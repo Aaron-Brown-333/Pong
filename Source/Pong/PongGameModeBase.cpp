@@ -10,6 +10,12 @@
 #include "Kismet/GameplayStatics.h"
 #include "PongBall.h"
 
+
+APongGameModeBase::APongGameModeBase()
+{
+    GameStateClass = APongGameState::StaticClass();
+}
+
 void APongGameModeBase::BeginPlay()
 {
     Super::BeginPlay();
@@ -19,20 +25,8 @@ void APongGameModeBase::BeginPlay()
     BallMesh = Cast<UStaticMeshComponent>(GameBall->GetRootComponent());
     BallMesh->OnComponentHit.AddDynamic(this, &APongGameModeBase::OnPaddleHit);
 
-    StartGame();
-}
-
-APongGameModeBase::APongGameModeBase()
-{
-    GameStateClass = APongGameState::StaticClass();
-}
-
-void APongGameModeBase::StartGame()
-{
-    if (PongGameState) {
-        PongGameState->Player1Score = 0;
-        PongGameState->Player2Score = 0;
-    }
+    PongGameState->ResetPlayerScores();
+    
 }
 
 void APongGameModeBase::ResetBall() {
@@ -45,50 +39,20 @@ void APongGameModeBase::OnPointScored(int scoringPlayer)
 {
     // Initialize.
     ResetBall();
-    ResetPredictedExitPoint();
-
-    // Update player score.
-    UpdatePlayerScore(scoringPlayer);
+    PongGameState ? PongGameState->ResetPredictedExitPoint() : void();
+    PongGameState ? PongGameState->IncrementPlayerScore(scoringPlayer) : void();
 
     // Check for a win condition.
-    int WinningPlayer = HasPlayerWon(1) ? 1 : HasPlayerWon(2) ? 2 : 0;
-    if (WinningPlayer) {
-        ShowGameOver(WinningPlayer);
+    if (HasPlayerWon(scoringPlayer)) {
+        ShowGameOver(scoringPlayer);
     }
     else {
         ShowPointScored(scoringPlayer);
     }
 }
 
-void APongGameModeBase::ResetPredictedExitPoint()
-{
-    if (!PongGameState) {
-        return;
-    }
-
-    PongGameState->PredictedExitPoint = FVector::ZeroVector;
-}
-
-void APongGameModeBase::UpdatePlayerScore(int scoringPlayer)
-{
-    if (!PongGameState) {
-        return;
-    }
-
-    if (scoringPlayer == 1) {
-        PongGameState->Player1Score = PongGameState->Player1Score + 1;
-    }
-    else {
-        PongGameState->Player2Score = PongGameState->Player2Score + 1;
-    }
-}
-
 bool APongGameModeBase::HasPlayerWon(int player)
 {
-    if (!PongGameState) {
-        return false;
-    }
-
     int player1Score = PongGameState->Player1Score;
     int player2Score = PongGameState->Player2Score;
 
@@ -126,43 +90,43 @@ FCollisionQueryParams APongGameModeBase::GetCollisionParams() {
   
 }
 
-FVector APongGameModeBase::PredictBallExitPoint()
+void APongGameModeBase::PredictBallPath()
 {
-    FVector Start = GameBall->GetActorLocation();
-    FVector ForwardVector = GameBall->GetVelocity().GetSafeNormal();
-    FVector End = ((ForwardVector * 2000.f) + Start); // adjust the distance as per your game
+    FVector Start, End;
     FHitResult HitResult;
     FCollisionQueryParams CollisionParams = GetCollisionParams();
+
+    Start = GameBall->GetActorLocation();
+    FVector ForwardVector = GameBall->GetVelocity().GetSafeNormal();
+    End = ((ForwardVector * 2000.f) + Start);
 
     int bounceCount = 0;
     while (bounceCount < MaxBouncePrediction)  // Loop until a goal box is hit or we reach MaxBouncePrediction times
     {
-        End = ((ForwardVector * 2000.f) + Start);  // Set the end point of the trace line
+        End = ((ForwardVector * 2000.f) + Start);
         bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, CollisionParams);
 
         if (bHit)
         {
-            DrawDebugLine(GetWorld(), Start, HitResult.Location, FColor::Green, false, 1, 0, 5);
-
-            // Check if a goal box is hit
+            DrawDebugLine(GetWorld(), Start, HitResult.Location, FColor::Green, false, 1, 0, 1);
             if (HitResult.GetActor()->ActorHasTag("GoalBox"))
             {
-                return HitResult.Location;
+                PongGameState->PredictedExitPoint = HitResult.Location;
+                return;
             }
-            else  // Otherwise, we hit a wall, so let's prepare for the next iteration
-            {
-                ForwardVector = ForwardVector - 2 * (ForwardVector | HitResult.Normal) * HitResult.Normal;
-                Start = HitResult.Location + ForwardVector * 10.0f;
-            }
+            // Otherwise, we hit a wall, so let's prepare for the next iteration
+            ForwardVector = ForwardVector - 2 * (ForwardVector | HitResult.Normal) * HitResult.Normal;
+            Start = HitResult.Location + ForwardVector * 10.0f;
         }
         else
         {
-            // Nothing was hit, return zero vector
-            return FVector::ZeroVector;
+            // Nothing was hit, something went wrong, return zero vector
+            PongGameState->ResetPredictedExitPoint();
+            return;
         }
         bounceCount++;
     }
-    return FVector::ZeroVector;
+    PongGameState->ResetPredictedExitPoint();
 }
 
 
@@ -171,5 +135,5 @@ void APongGameModeBase::OnPaddleHit(UPrimitiveComponent* HitComponent, AActor* O
     {
         return;
     }
-    PredictedExitPoint = PredictBallExitPoint();
+    PredictBallPath();
 }
